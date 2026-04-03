@@ -10,31 +10,58 @@ Checks:
 - final `GO / NO-GO` verdict
 - saved Markdown report in `docs/release-audits/`
 
-## Install
-
-### Claude Code
-
-Follow [`.claude/INSTALL.md`](.claude/INSTALL.md)
-
-### Cursor
-
-Follow [`.cursor/INSTALL.md`](.cursor/INSTALL.md)
+## Installation
 
 ### Codex
 
-Tell Codex:
-
-```text
-Fetch and follow instructions from https://raw.githubusercontent.com/Crash1995/release-audit/refs/heads/main/.codex/INSTALL.md
+```bash
+mkdir -p ~/.codex/skills
+git clone https://github.com/Crash1995/release-audit.git ~/.codex/skills/release-audit
 ```
 
-Or open [`.codex/INSTALL.md`](.codex/INSTALL.md)
+### Claude Code
+
+```bash
+mkdir -p ~/.claude/skills
+git clone https://github.com/Crash1995/release-audit.git ~/.claude/skills/release-audit
+```
+
+Or install per project:
+
+```bash
+mkdir -p .claude/skills
+git clone https://github.com/Crash1995/release-audit.git .claude/skills/release-audit
+```
+
+### Cursor
+
+```bash
+mkdir -p ~/.cursor/skills
+git clone https://github.com/Crash1995/release-audit.git ~/.cursor/skills/release-audit
+```
+
+Or install per project:
+
+```bash
+mkdir -p .cursor/skills
+git clone https://github.com/Crash1995/release-audit.git .cursor/skills/release-audit
+```
 
 ### Antigravity
 
-Follow [`.antigravity/INSTALL.md`](.antigravity/INSTALL.md)
+```bash
+mkdir -p ~/.gemini/antigravity/skills
+git clone https://github.com/Crash1995/release-audit.git ~/.gemini/antigravity/skills/release-audit
+```
 
-## Verify Installation
+Or install per project:
+
+```bash
+mkdir -p .agent/skills
+git clone https://github.com/Crash1995/release-audit.git .agent/skills/release-audit
+```
+
+## Usage
 
 Start a new session and ask for a full release audit.
 
@@ -52,10 +79,10 @@ Use $release-audit and run a full release audit for this repository.
 
 ## What’s Inside
 
-- [`SKILL.md`](SKILL.md)
-- [`agents/openai.yaml`](agents/openai.yaml)
-- [`scripts/`](scripts)
-- [`references/`](references)
+- `SKILL.md`
+- `agents/openai.yaml`
+- `scripts/`
+- `references/`
 
 ## Local Run
 
