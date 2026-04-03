@@ -125,4 +125,4 @@ Cleanup-находки сами по себе не блокируют релиз
 
 - Не храни в репозитории локальные audit-артефакты из `docs/release-audits/`.
 - Не коммить `__pycache__`, временные smoke-отчёты и machine-specific конфиги.
-- Для публикации оставляй только сам skill: `SKILL.md`, `agents/`, `scripts/`, `references/`, `tests/`, `README.md`.
+- Для публикации оставляй только сам skill: `SKILL.md`, `agents/`, `scripts/`, `references/`, `README.md`.

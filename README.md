@@ -15,7 +15,6 @@
 - `SKILL.md`: основная инструкция skill-а.
 - `scripts/`: детерминированные проверки и агрегатор.
 - `references/`: шкала severity, шаблон отчёта и правила против ложных срабатываний.
-- `tests/`: unit tests.
 
 ## Требования
 
@@ -118,12 +117,6 @@ python3 scripts/run_release_audit.py /path/to/repo
 ```
 
 ## Локальная проверка
-
-Запуск тестов:
-
-```bash
-python3 -m unittest discover -s tests
-```
 
 Smoke run:
 
