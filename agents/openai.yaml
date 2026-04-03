@@ -1,0 +1,7 @@
+interface:
+  display_name: "Release Audit"
+  short_description: "Run a full pre-release codebase audit"
+  default_prompt: "Use $release-audit to perform a full release audit of this repository and return a GO/NO-GO verdict."
+
+policy:
+  allow_implicit_invocation: true
