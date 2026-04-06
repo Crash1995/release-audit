@@ -34,6 +34,9 @@ description: Use when the user asks for a full pre-release audit of an entire co
 - `scripts/inventory_repo.py` для полного списка файлов;
 - `scripts/read_audit_history.py` для чтения прошлых аудитов;
 - `scripts/run_fast_scans.py` для regex/keyword сигналов высокого риска;
+- `scripts/security_audit.py` для дополнительных security/data-leak checks;
+- `scripts/performance_audit.py` для memory/performance smells и resource-handling checks;
+- `scripts/dependency_audit.py` для dependency/configuration risks;
 - `scripts/python_policy_checks.py` для AST-проверок Python-кода;
 - `scripts/tech_debt_audit.py` для детерминированной проверки Python tech debt;
 - `scripts/check_release_artifacts.py` для gitignore/.env hygiene и риска утечки env;
@@ -61,12 +64,14 @@ description: Use when the user asks for a full pre-release audit of an entire co
 ## Области проверки
 
 Проверь и зафиксируй findings по этим блокам:
-- заглушки, `TODO`, временный код, захардкоженные ответы, закомментированный мёртвый код;
+- заглушки, task markers, временный код, захардкоженные ответы, закомментированный мёртвый код;
 - безопасность: секреты, небезопасный shell, небезопасная десериализация, `eval`/`exec`, опасные конфиги;
+- утечки данных: токены в browser storage, чувствительные поля в логах, `.env`/gitignore риски;
+- память и производительность: blocking calls, тяжёлые вызовы в циклах, незакрытые ресурсы, listener/resource leaks;
 - полнота реализации, если найден источник требований в `README`, `docs/`, `spec`, `issues`, `PRD`;
 - обработка ошибок и `edge cases`;
 - качество кода: длина функций, вложенность, дублирование, типизация, naming;
-- технический долг: пустые функции, TODO/FIXME/HACK в source-коде, слабые имена, mutable defaults, blocking calls в async-коде;
+- технический долг: пустые функции, task markers в source-коде, слабые имена, mutable defaults, blocking calls в async-коде;
 - зависимости, конфигурация окружения и риски утечки через git;
 - готовность к продакшену: debug-флаги, логирование, graceful shutdown, таймауты, лимиты.
 - cleanup репозитория: устаревшие docs, legacy-конфиги, backup-файлы, неиспользуемые тесты и служебный мусор.
@@ -80,6 +85,7 @@ description: Use when the user asks for a full pre-release audit of an entire co
 ## Формат findings
 
 Для каждого finding укажи:
+- `category`;
 - `severity`;
 - `file:line`;
 - краткое название проблемы;
@@ -93,14 +99,13 @@ description: Use when the user asks for a full pre-release audit of an entire co
 
 Финальный ответ всегда строится в таком порядке:
 1. `GO` или `NO-GO` verdict.
-2. Критичные findings.
-3. Что исправили с прошлого аудита.
-4. Что осталось и что надо доделать до релиза.
-5. Важные findings.
-6. Technical Debt.
-7. Cleanup-кандидаты: что удалить, архивировать или подтвердить вручную.
-8. Coverage summary.
-9. `Blocked` проверки и допущения.
+2. `Critical / High / Medium / Low` findings.
+3. Внутри severity сгруппируй вывод по категориям: `Bugs and Logic Errors`, `Security`, `Performance and Memory`, `Data Leaks`, `Code Quality`, `Technical Debt`, `Dependencies and Configuration`, `Cleanup`.
+4. Если в категории нет находок, явно напиши `No issues found`.
+5. Что исправили с прошлого аудита.
+6. Что осталось и что надо доделать до релиза.
+7. Coverage summary.
+8. `Blocked` проверки и допущения.
 
 Если пользователь не просил исправления, не переходи к патчам автоматически. Сначала закончи аудит.
 

@@ -4,6 +4,9 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
+
+from finding_utils import build_finding
 
 LEGACY_CONFIG_FILES = {
     "pytest.ini",
@@ -28,17 +31,28 @@ STALE_DOC_MARKERS = (
 STALE_TEST_MARKERS = STALE_DOC_MARKERS
 
 
-def build_finding(rule: str, severity: str, path: str, message: str) -> dict[str, str]:
-    return {
-        "kind": "finding",
-        "rule": rule,
-        "severity": severity,
-        "path": path,
-        "message": message,
-    }
-
+def build_cleanup_finding(
+    rule: str,
+    path: Path,
+    title: str,
+    description: str,
+    impact: str,
+    suggested_fix: str,
+) -> dict[str, object]:
+    """Собирает единый cleanup finding."""
+    return build_finding(
+        rule=rule,
+        severity="P2",
+        category="Cleanup",
+        path=path,
+        title=title,
+        description=description,
+        impact=impact,
+        suggested_fix=suggested_fix,
+    )
 
 def is_stale_doc(path: Path) -> bool:
+    """Определяет, похож ли документ на устаревший или архивный файл."""
     if "docs" not in path.parts:
         return False
     stem = path.stem.lower()
@@ -46,59 +60,76 @@ def is_stale_doc(path: Path) -> bool:
 
 
 def is_stale_test(path: Path) -> bool:
+    """Определяет, похож ли тест на legacy или archive-файл."""
     if "tests" not in path.parts:
         return False
     stem = path.stem.lower()
     return any(marker in stem for marker in STALE_TEST_MARKERS)
 
 
-def build_findings(root: Path) -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        relative_path = path.relative_to(root)
-        name = relative_path.name
-        if name in LEGACY_CONFIG_FILES:
-            findings.append(
-                build_finding(
-                    "legacy-config-file",
-                    "P2",
-                    str(relative_path),
-                    "Legacy config file should be reviewed for cleanup before release",
-                )
+def inspect_file(relative_path: Path) -> list[dict[str, object]]:
+    """Возвращает cleanup-findings для одного файла."""
+    findings: list[dict[str, object]] = []
+    name = relative_path.name
+    if name in LEGACY_CONFIG_FILES:
+        findings.append(
+            build_cleanup_finding(
+                rule="legacy-config-file",
+                path=relative_path,
+                title="Legacy config file in repository",
+                description="The repository contains a legacy config file that may no longer be required.",
+                impact="Unused config files create confusion and can mislead maintainers about the active toolchain.",
+                suggested_fix="Confirm whether the config is still used; remove or archive it if it is obsolete.",
             )
-        if is_stale_doc(relative_path):
-            findings.append(
-                build_finding(
-                    "stale-doc-file",
-                    "P2",
-                    str(relative_path),
-                    "Documentation file looks stale and should be archived or removed",
-                )
+        )
+    if is_stale_doc(relative_path):
+        findings.append(
+            build_cleanup_finding(
+                rule="stale-doc-file",
+                path=relative_path,
+                title="Documentation file looks stale",
+                description="The file name suggests the document is deprecated, archived, legacy, or otherwise stale.",
+                impact="Stale documentation misleads users and increases maintenance noise.",
+                suggested_fix="Review the document, then delete it, archive it, or replace it with current documentation.",
             )
-        if is_stale_test(relative_path):
-            findings.append(
-                build_finding(
-                    "stale-test-file",
-                    "P2",
-                    str(relative_path),
-                    "Test file looks legacy or unused and should be reviewed for cleanup",
-                )
+        )
+    if is_stale_test(relative_path):
+        findings.append(
+            build_cleanup_finding(
+                rule="stale-test-file",
+                path=relative_path,
+                title="Test file looks stale or legacy",
+                description="The test file name suggests it is deprecated, archived, or no longer active.",
+                impact="Legacy tests create false confidence and slow down maintenance and triage.",
+                suggested_fix="Verify whether the test still protects active behavior; remove or archive it if not.",
             )
-        if any(relative_path.name.endswith(suffix) for suffix in BACKUP_SUFFIXES):
-            findings.append(
-                build_finding(
-                    "backup-artifact-file",
-                    "P2",
-                    str(relative_path),
-                    "Backup or temporary file should be removed from the repository",
-                )
+        )
+    if any(relative_path.name.endswith(suffix) for suffix in BACKUP_SUFFIXES):
+        findings.append(
+            build_cleanup_finding(
+                rule="backup-artifact-file",
+                path=relative_path,
+                title="Backup or temporary artifact in repository",
+                description="The repository contains a backup or temporary file variant.",
+                impact="Backup artifacts increase repository noise and can expose outdated code or data accidentally.",
+                suggested_fix="Delete the backup file from version control and keep only the current source of truth.",
             )
+        )
     return findings
 
 
-def load_config_helpers():
+def build_findings(root: Path) -> list[dict[str, object]]:
+    """Строит findings по cleanup-кандидатам в репозитории."""
+    findings: list[dict[str, object]] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        findings.extend(inspect_file(path.relative_to(root)))
+    return findings
+
+
+def load_config_helpers() -> ModuleType:
+    """Загружает helper для suppressions и severity overrides."""
     module_path = Path(__file__).with_name("load_audit_config.py")
     spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -108,6 +139,7 @@ def load_config_helpers():
 
 
 def main() -> None:
+    """CLI entrypoint для stale files audit."""
     root = Path.cwd()
     findings = build_findings(root)
     config_module = load_config_helpers()

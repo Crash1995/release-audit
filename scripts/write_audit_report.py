@@ -13,6 +13,23 @@ CLEANUP_RULES = {
     "stale-doc-file",
     "stale-test-file",
 }
+SEVERITY_LABELS = {
+    "P0": "Critical",
+    "P1": "High",
+    "P2": "Medium",
+    "P3": "Low",
+}
+SEVERITY_ORDER = ("P0", "P1", "P2", "P3")
+CATEGORY_ORDER = (
+    "Bugs and Logic Errors",
+    "Security",
+    "Performance and Memory",
+    "Data Leaks",
+    "Code Quality",
+    "Technical Debt",
+    "Dependencies and Configuration",
+    "Cleanup",
+)
 TECH_DEBT_RULES = {
     "python-async-blocking-call",
     "python-broad-except",
@@ -29,28 +46,38 @@ TECH_DEBT_RULES = {
 LEGACY_METADATA_PREFIX = "<!-- release-audit-data "
 METADATA_PREFIX = "<!-- release-audit-data-v2 "
 METADATA_SUFFIX = " -->"
+METADATA_COMPRESSION_LEVEL = 9
 
 
 def format_finding(finding: dict[str, object]) -> str:
+    """Форматирует один finding в Markdown-блок отчёта."""
     rule = str(finding.get("rule", "unknown"))
+    severity = SEVERITY_LABELS.get(str(finding.get("severity", "")), str(finding.get("severity", "")))
     path = str(finding.get("path", "."))
-    severity = str(finding.get("severity", ""))
-    return f"- [{severity}] {rule} :: {path}"
-
-
-def format_grouped_finding(group: dict[str, object]) -> str:
-    severity = str(group["severity"])
-    rule = str(group["rule"])
-    path = str(group["path"])
-    count = int(group["count"])
-    label = "finding" if count == 1 else "findings"
-    line_summary = str(group["line_summary"])
-    if line_summary:
-        return f"- [{severity}] {rule} :: {path} ({count} {label}; lines: {line_summary})"
-    return f"- [{severity}] {rule} :: {path} ({count} {label})"
+    line = finding.get("line")
+    location = f"{path}:{line}" if line else path
+    title = str(finding.get("title", rule))
+    description = str(finding.get("description", "")).strip()
+    impact = str(finding.get("impact", "")).strip()
+    suggested_fix = str(finding.get("suggested_fix", "")).strip()
+    snippet = str(finding.get("snippet", "")).strip()
+    lines = [
+        f"- [{severity}] {title} :: {location}",
+        f"  Rule: `{rule}`",
+    ]
+    if description:
+        lines.append(f"  Description: {description}")
+    if impact:
+        lines.append(f"  Why it matters: {impact}")
+    if suggested_fix:
+        lines.append(f"  Suggested fix: {suggested_fix}")
+    if snippet:
+        lines.append(f"  Evidence: `{snippet}`")
+    return "\n".join(lines)
 
 
 def build_saved_report(report: dict[str, object]) -> dict[str, object]:
+    """Строит компактную persisted-версию отчёта для metadata/history."""
     inventory = dict(report.get("inventory", {}))
     findings = list(report.get("findings", []))
     blocked = [item for item in findings if item.get("kind") == "blocked"]
@@ -77,12 +104,16 @@ def build_saved_report(report: dict[str, object]) -> dict[str, object]:
 
 
 def compact_finding(finding: dict[str, object]) -> dict[str, object]:
+    """Оставляет минимальный набор полей finding-а для сохранения."""
     compact = {
         "kind": finding.get("kind", "finding"),
         "rule": finding.get("rule"),
         "severity": finding.get("severity"),
+        "category": finding.get("category"),
         "path": finding.get("path"),
     }
+    if "title" in finding:
+        compact["title"] = finding.get("title")
     if "line" in finding:
         compact["line"] = finding.get("line")
     if compact["kind"] == "blocked" and "error" in finding:
@@ -91,6 +122,7 @@ def compact_finding(finding: dict[str, object]) -> dict[str, object]:
 
 
 def build_compact_comparison(comparison: dict[str, object]) -> dict[str, list[dict[str, object]]]:
+    """Уплотняет comparison-секции для сохранения в metadata."""
     return {
         "new_findings": [compact_finding(item) for item in comparison.get("new_findings", [])],
         "carried_over_findings": [compact_finding(item) for item in comparison.get("carried_over_findings", [])],
@@ -99,76 +131,60 @@ def build_compact_comparison(comparison: dict[str, object]) -> dict[str, list[di
 
 
 def build_finding_summary(findings: list[dict[str, object]]) -> dict[str, object]:
+    """Строит агрегированную статистику findings по rule/severity/category."""
     by_rule: dict[str, int] = {}
+    by_severity: dict[str, int] = {}
+    by_category: dict[str, int] = {}
     for finding in findings:
         rule = str(finding.get("rule", "unknown"))
+        severity = str(finding.get("severity", "unknown"))
+        category = str(finding.get("category", "Uncategorized"))
         by_rule[rule] = by_rule.get(rule, 0) + 1
-    return {"total": len(findings), "by_rule": by_rule}
+        by_severity[severity] = by_severity.get(severity, 0) + 1
+        by_category[category] = by_category.get(category, 0) + 1
+    return {
+        "total": len(findings),
+        "by_rule": by_rule,
+        "by_severity": by_severity,
+        "by_category": by_category,
+    }
 
 
-def summarize_lines(lines: list[int], max_ranges: int = 8) -> str:
-    if not lines:
-        return ""
-    unique_lines = sorted(set(lines))
-    ranges: list[str] = []
-    start = unique_lines[0]
-    end = unique_lines[0]
-    for line in unique_lines[1:]:
-        if line == end + 1:
-            end = line
-            continue
-        ranges.append(str(start) if start == end else f"{start}-{end}")
-        start = end = line
-    ranges.append(str(start) if start == end else f"{start}-{end}")
-    if len(ranges) <= max_ranges:
-        return ", ".join(ranges)
-    visible = ", ".join(ranges[:max_ranges])
-    return f"{visible}, +{len(ranges) - max_ranges} more"
+def build_section_findings(
+    findings: list[dict[str, object]],
+    category: str,
+    severity: str,
+) -> list[dict[str, object]]:
+    """Фильтрует findings по категории и severity для секции отчёта."""
+    return [
+        finding
+        for finding in findings
+        if finding.get("category") == category and finding.get("severity") == severity
+    ]
 
 
-def group_findings(findings: list[dict[str, object]]) -> list[dict[str, object]]:
-    grouped: dict[tuple[str, str, str], dict[str, object]] = {}
-    for finding in findings:
-        key = (
-            str(finding.get("severity", "")),
-            str(finding.get("rule", "unknown")),
-            str(finding.get("path", ".")),
-        )
-        group = grouped.setdefault(
-            key,
-            {
-                "severity": key[0],
-                "rule": key[1],
-                "path": key[2],
-                "count": 0,
-                "lines": [],
-            },
-        )
-        group["count"] = int(group["count"]) + 1
-        if "line" in finding and finding.get("line") is not None:
-            group["lines"].append(int(finding["line"]))
-    items = list(grouped.values())
-    for item in items:
-        item["line_summary"] = summarize_lines(list(item["lines"]))
-    return sorted(items, key=lambda item: (item["severity"], item["rule"], item["path"]))
-
-
-def build_markdown(report: dict[str, object]) -> str:
-    decision = dict(report["decision"])
-    inventory = dict(report["inventory"])
-    findings = list(report["findings"])
-    comparison = dict(report["comparison"])
-    saved_report = build_saved_report(report)
-    cleanup_findings = [item for item in findings if item.get("rule") in CLEANUP_RULES]
-    tech_debt_findings = [item for item in findings if item.get("rule") in TECH_DEBT_RULES]
-    grouped_cleanup = group_findings(cleanup_findings)
-    grouped_tech_debt = group_findings(tech_debt_findings)
-    blocking_findings = [
+def build_blocking_findings(
+    findings: list[dict[str, object]],
+    reasons: list[str],
+) -> list[dict[str, object]]:
+    """Возвращает findings, которые попадают в blocking section."""
+    return [
         item
         for item in findings
-        if item.get("rule") in decision.get("reasons", []) or item.get("severity") == "P0"
+        if item.get("rule") in reasons or item.get("severity") == "P0" or item.get("kind") == "blocked"
     ]
-    lines = [
+
+
+def build_machine_report_lines(
+    report: dict[str, object],
+    inventory: dict[str, object],
+    findings: list[dict[str, object]],
+    comparison: dict[str, object],
+    decision: dict[str, object],
+    summary: dict[str, object],
+) -> list[str]:
+    """Строит верхнюю summary-часть Markdown-отчёта."""
+    return [
         "# Release Audit",
         "",
         "## GO / NO-GO",
@@ -180,6 +196,10 @@ def build_markdown(report: dict[str, object]) -> str:
         f"- Root: {report['root']}",
         f"- Total files: {inventory['total_files']}",
         f"- Findings: {len(findings)}",
+        f"- Critical: {summary['by_severity'].get('P0', 0)}",
+        f"- High: {summary['by_severity'].get('P1', 0)}",
+        f"- Medium: {summary['by_severity'].get('P2', 0)}",
+        f"- Low: {summary['by_severity'].get('P3', 0)}",
         "",
         "## Progress",
         "",
@@ -190,55 +210,84 @@ def build_markdown(report: dict[str, object]) -> str:
         "## Blocking Findings",
         "",
     ]
+
+
+def build_category_sections(findings: list[dict[str, object]]) -> list[str]:
+    """Строит category/severity секции findings."""
+    lines: list[str] = []
+    for category in CATEGORY_ORDER:
+        category_findings = [item for item in findings if item.get("category") == category]
+        lines.extend(["", f"## {category}", ""])
+        if not category_findings:
+            lines.append("No issues found.")
+            continue
+        for severity in SEVERITY_ORDER:
+            severity_findings = build_section_findings(findings, category, severity)
+            if not severity_findings:
+                continue
+            lines.extend([f"### {SEVERITY_LABELS[severity]}", ""])
+            lines.extend(format_finding(item) for item in severity_findings)
+            lines.append("")
+    return lines
+
+
+def build_coverage_lines(
+    inventory: dict[str, object],
+    findings: list[dict[str, object]],
+    saved_report: dict[str, object],
+) -> list[str]:
+    """Строит coverage summary и blocked checks."""
+    cleanup_findings = [item for item in findings if item.get("rule") in CLEANUP_RULES]
+    tech_debt_findings = [item for item in findings if item.get("rule") in TECH_DEBT_RULES]
+    lines = [
+        "## Coverage Summary",
+        "",
+        f"- Total files: {inventory['total_files']}",
+        f"- Total findings: {len(findings)}",
+        f"- Technical debt findings: {len(tech_debt_findings)}",
+        f"- Cleanup findings: {len(cleanup_findings)}",
+        f"- Blocked checks: {saved_report['coverage']['blocked_count']}",
+        "",
+        "## Blocked Checks",
+        "",
+    ]
+    blocked_findings = [item for item in findings if item.get("kind") == "blocked"]
+    if blocked_findings:
+        lines.extend(format_finding(item) for item in blocked_findings)
+    else:
+        lines.append("No issues found.")
+    return lines
+
+
+def build_markdown(report: dict[str, object]) -> str:
+    """Собирает полный Markdown-отчёт release-аудита."""
+    decision = dict(report["decision"])
+    inventory = dict(report["inventory"])
+    findings = list(report["findings"])
+    comparison = dict(report["comparison"])
+    saved_report = build_saved_report(report)
+    blocking_findings = build_blocking_findings(findings, list(decision.get("reasons", [])))
+    summary = saved_report["finding_summary"]
+    lines = build_machine_report_lines(report, inventory, findings, comparison, decision, summary)
     if blocking_findings:
         lines.extend(format_finding(item) for item in blocking_findings)
     else:
         lines.append("- none")
-    lines.extend(
-        [
-            "",
-            "## Technical Debt",
-            "",
-            f"- Raw findings: {len(tech_debt_findings)}",
-            f"- Grouped entries: {len(grouped_tech_debt)}",
-            "",
-        ]
-    )
-    if grouped_tech_debt:
-        lines.extend(format_grouped_finding(item) for item in grouped_tech_debt)
-    else:
-        lines.append("- none")
-    lines.extend(
-        [
-            "",
-            "## Cleanup Candidates",
-            "",
-            f"- Raw findings: {len(cleanup_findings)}",
-            f"- Grouped entries: {len(grouped_cleanup)}",
-            "",
-        ]
-    )
-    if grouped_cleanup:
-        lines.extend(format_grouped_finding(item) for item in grouped_cleanup)
-    else:
-        lines.append("- none")
-    lines.extend(
-        [
-            "",
-            build_metadata_block(saved_report),
-        ]
-    )
+    lines.extend(build_category_sections(findings))
+    lines.extend(["", *build_coverage_lines(inventory, findings, saved_report), "", build_metadata_block(saved_report)])
     return "\n".join(lines) + "\n"
 
 
 def build_metadata_block(saved_report: dict[str, object]) -> str:
+    """Строит скрытый metadata-блок для хранения compact report в Markdown."""
     payload = json.dumps(saved_report, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    compressed = zlib.compress(payload, level=9)
+    compressed = zlib.compress(payload, level=METADATA_COMPRESSION_LEVEL)
     encoded = base64.urlsafe_b64encode(compressed).decode("ascii")
     return f"{METADATA_PREFIX}{encoded}{METADATA_SUFFIX}"
 
 
 def extract_saved_report(markdown: str) -> dict[str, object]:
+    """Извлекает компактный сохранённый отчёт из Markdown metadata."""
     pattern = re.escape(METADATA_PREFIX) + r"(.*?)" + re.escape(METADATA_SUFFIX)
     match = re.search(pattern, markdown, flags=re.DOTALL)
     if match:
@@ -253,6 +302,7 @@ def extract_saved_report(markdown: str) -> dict[str, object]:
 
 
 def write_audit_report(root: Path, report: dict[str, object], timestamp: str | None = None) -> dict[str, str]:
+    """Сохраняет Markdown-отчёт в docs/release-audits и возвращает путь."""
     report_time = timestamp or datetime.now().strftime("%Y-%m-%d-%H%M")
     history_dir = root / "docs" / "release-audits"
     history_dir.mkdir(parents=True, exist_ok=True)

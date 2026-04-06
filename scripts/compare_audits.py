@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 def build_key(finding: dict[str, object]) -> tuple[object, ...]:
+    """Строит ключ сравнения для стабильного diff между аудитами."""
     return (
         finding.get("rule"),
         finding.get("path"),
@@ -12,6 +13,7 @@ def build_key(finding: dict[str, object]) -> tuple[object, ...]:
 def compare_audits(
     previous_findings: list[dict[str, object]], current_findings: list[dict[str, object]]
 ) -> dict[str, list[dict[str, object]]]:
+    """Сравнивает текущие findings с предыдущим аудитом."""
     previous_by_key = {build_key(finding): finding for finding in previous_findings}
     current_by_key = {build_key(finding): finding for finding in current_findings}
 
