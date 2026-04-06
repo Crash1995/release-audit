@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_finding
+from shared import get_qualified_name as _get_qualified_name, load_config_helpers, safe_read_text
 
 EXPENSIVE_CALLS = {
     "json.load",
@@ -25,24 +24,9 @@ EXPENSIVE_CALLS = {
 JS_EVENT_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx"}
 
 
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
 def get_qualified_name(node: ast.AST) -> str:
-    """Возвращает квалифицированное имя функции или атрибута."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        parent = get_qualified_name(node.value)
-        return f"{parent}.{node.attr}" if parent else node.attr
-    return ""
+    """Делегирует в shared.get_qualified_name."""
+    return _get_qualified_name(node)
 
 
 def walk_without_nested_defs(node: ast.AST) -> Iterator[ast.AST]:
@@ -105,10 +89,22 @@ def scan_loop_node(relative_path: Path, node: ast.For | ast.AsyncFor | ast.While
     return findings
 
 
+def is_inside_with(node: ast.AST) -> bool:
+    """Проверяет, находится ли вызов внутри with/async with через цепочку parent."""
+    current = getattr(node, "parent", None)
+    while current is not None:
+        if isinstance(current, (ast.With, ast.AsyncWith)):
+            return True
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+            break
+        current = getattr(current, "parent", None)
+    return False
+
+
 def scan_resource_call(relative_path: Path, node: ast.Call) -> list[dict[str, object]]:
     """Проверяет вызов на ресурсные smells вне контекст-менеджера."""
     if isinstance(node.func, ast.Name) and node.func.id == "open":
-        if not isinstance(getattr(node, "parent", None), ast.With):
+        if not is_inside_with(node):
             return [
                 build_performance_finding(
                     rule="open-without-context-manager",
@@ -123,8 +119,7 @@ def scan_resource_call(relative_path: Path, node: ast.Call) -> list[dict[str, ob
                 )
             ]
     if get_qualified_name(node.func) == "aiohttp.ClientSession":
-        parent = getattr(node, "parent", None)
-        if not isinstance(parent, (ast.AsyncWith, ast.With)):
+        if not is_inside_with(node):
             return [
                 build_performance_finding(
                     rule="aiohttp-session-without-context",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import io
 import json
 import re
@@ -9,9 +8,9 @@ import sys
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_finding
+from shared import get_qualified_name as _get_qualified_name, get_short_call_name, load_config_helpers
 
 MAX_FUNCTION_LENGTH = 50
 MAX_NESTING = 3
@@ -35,16 +34,6 @@ TECH_DEBT_RULES = {
 CONTROL_NODES = (ast.AsyncFor, ast.For, ast.If, ast.Match, ast.Try, ast.While, ast.With, ast.AsyncWith)
 
 
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
 def is_source_python(path: Path) -> bool:
     """Проверяет, относится ли Python-файл к исходному коду, а не к skip-категориям."""
     return path.suffix == ".py" and not (set(path.parts) & SKIP_DIR_NAMES)
@@ -52,21 +41,12 @@ def is_source_python(path: Path) -> bool:
 
 def get_call_name(node: ast.Call) -> str:
     """Возвращает короткое имя вызываемой функции."""
-    if isinstance(node.func, ast.Name):
-        return node.func.id
-    if isinstance(node.func, ast.Attribute):
-        return node.func.attr
-    return ""
+    return get_short_call_name(node)
 
 
 def get_qualified_name(node: ast.AST) -> str:
     """Возвращает квалифицированное имя атрибута или вызова."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        parent_name = get_qualified_name(node.value)
-        return f"{parent_name}.{node.attr}" if parent_name else node.attr
-    return ""
+    return _get_qualified_name(node)
 
 
 def is_public_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

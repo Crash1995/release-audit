@@ -7,6 +7,8 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
+from shared import compact_finding as _compact_finding
+
 CLEANUP_RULES = {
     "backup-artifact-file",
     "legacy-config-file",
@@ -93,6 +95,12 @@ def build_saved_report(report: dict[str, object]) -> dict[str, object]:
         "finding_summary": build_finding_summary(findings),
         "coverage": {
             "total_files": int(inventory.get("total_files", 0) or 0),
+            "reviewed_files": sum(
+                1 for f in inventory.get("files", []) if f.get("should_review_deeply")
+            ),
+            "skipped_files": sum(
+                1 for f in inventory.get("files", []) if not f.get("should_review_deeply")
+            ),
             "finding_count": len(findings),
             "blocked_count": len(blocked),
         },
@@ -105,20 +113,7 @@ def build_saved_report(report: dict[str, object]) -> dict[str, object]:
 
 def compact_finding(finding: dict[str, object]) -> dict[str, object]:
     """Оставляет минимальный набор полей finding-а для сохранения."""
-    compact = {
-        "kind": finding.get("kind", "finding"),
-        "rule": finding.get("rule"),
-        "severity": finding.get("severity"),
-        "category": finding.get("category"),
-        "path": finding.get("path"),
-    }
-    if "title" in finding:
-        compact["title"] = finding.get("title")
-    if "line" in finding:
-        compact["line"] = finding.get("line")
-    if compact["kind"] == "blocked" and "error" in finding:
-        compact["error"] = finding.get("error")
-    return compact
+    return _compact_finding(finding)
 
 
 def build_compact_comparison(comparison: dict[str, object]) -> dict[str, list[dict[str, object]]]:
@@ -243,6 +238,8 @@ def build_coverage_lines(
         "## Coverage Summary",
         "",
         f"- Total files: {inventory['total_files']}",
+        f"- Reviewed files: {saved_report['coverage'].get('reviewed_files', 'N/A')}",
+        f"- Skipped files: {saved_report['coverage'].get('skipped_files', 'N/A')}",
         f"- Total findings: {len(findings)}",
         f"- Technical debt findings: {len(tech_debt_findings)}",
         f"- Cleanup findings: {len(cleanup_findings)}",

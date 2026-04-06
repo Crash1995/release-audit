@@ -10,6 +10,7 @@ MODULE_SPECS = (
     ("inventory_module", "inventory_repo.py", "inventory_repo"),
     ("fast_module", "run_fast_scans.py", "run_fast_scans"),
     ("security_module", "security_audit.py", "security_audit"),
+    ("web3_security_module", "web3_security_audit.py", "web3_security_audit"),
     ("performance_module", "performance_audit.py", "performance_audit"),
     ("dependency_module", "dependency_audit.py", "dependency_audit"),
     ("python_module", "python_policy_checks.py", "python_policy_checks"),
@@ -69,6 +70,7 @@ def build_verification_checks(root: Path) -> list[str]:
         "inventory_repo",
         "run_fast_scans",
         "security_audit",
+        "web3_security_audit",
         "performance_audit",
         "dependency_audit",
         "python_policy_checks",
@@ -87,6 +89,7 @@ def collect_all_findings(root: Path, modules: dict[str, ModuleType]) -> list[dic
     """Собирает findings из всех scanner-слоёв до применения config."""
     findings = collect_fast_findings(root, modules["fast_module"])
     findings.extend(modules["security_module"].build_findings(root))
+    findings.extend(modules["web3_security_module"].build_findings(root))
     findings.extend(modules["performance_module"].build_findings(root))
     findings.extend(modules["dependency_module"].build_findings(root))
     findings.extend(collect_python_findings(root, modules["python_module"]))
@@ -147,6 +150,8 @@ def main() -> None:
     }
     json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+    if output["decision"].get("verdict") == "NO-GO":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from types import ModuleType
 
+from shared import compact_finding as _shared_compact_finding
+
 REPORT_GLOB_PATTERNS = ("*-release-audit.md", "*-release-audit.json")
 
 
@@ -68,20 +70,7 @@ def normalize_report(report: dict[str, object]) -> dict[str, object]:
 
 def compact_finding(finding: dict[str, object]) -> dict[str, object]:
     """Оставляет минимальный набор полей finding-а для хранения в истории."""
-    compact = {
-        "kind": finding.get("kind", "finding"),
-        "rule": finding.get("rule"),
-        "severity": finding.get("severity"),
-        "category": finding.get("category"),
-        "path": finding.get("path"),
-    }
-    if "title" in finding:
-        compact["title"] = finding.get("title")
-    if "line" in finding:
-        compact["line"] = finding.get("line")
-    if compact["kind"] == "blocked" and "error" in finding:
-        compact["error"] = finding.get("error")
-    return compact
+    return _shared_compact_finding(finding)
 
 
 def parse_saved_report(report_file: Path, writer_module: ModuleType) -> dict[str, object]:

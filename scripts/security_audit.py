@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_finding
+from shared import get_qualified_name, has_noqa_marker, load_config_helpers, safe_read_text
 
 TEXT_SUFFIXES = {
     ".html",
@@ -29,16 +28,6 @@ SENSITIVE_LOG_PATTERN = re.compile(
     r"(?i)(logger\.(debug|info|warning|error)|console\.(log|debug|warn|error)|print\()([^#\n]{0,160})(token|secret|password|mnemonic|private[_ -]?key)"
 )
 MAX_SNIPPET_LENGTH = 160
-
-
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def should_scan_text_file(path: Path) -> bool:
@@ -81,23 +70,11 @@ def build_security_finding(
 
 
 def should_ignore_match(path: Path, line: str) -> bool:
-    """Отсекает self-noise и служебные pattern-строки самого skill-а."""
+    """Отсекает self-noise через маркер и минимальные structural rules."""
+    if has_noqa_marker(line):
+        return True
     if path.parts and path.parts[0] == "references":
         return True
-    if path.parts and path.parts[0] == "scripts":
-        ignored_markers = (
-            '"pattern":',
-            '"description":',
-            '"title":',
-            '"impact":',
-            '"suggested_fix":',
-            "TOKEN_STORAGE_PATTERN",
-            "DOM_INJECTION_PATTERNS",
-            "SENSITIVE_LOG_PATTERN",
-            "dangerouslySetInnerHTML",
-        )
-        if any(marker in line for marker in ignored_markers):
-            return True
     return False
 
 
@@ -161,7 +138,9 @@ def scan_text_file(root: Path, path: Path) -> list[dict[str, object]]:
     """Сканирует текстовый файл на XSS/data-leak эвристики."""
     findings: list[dict[str, object]] = []
     relative_path = path.relative_to(root)
-    text = path.read_text(encoding="utf-8", errors="ignore")
+    text = safe_read_text(path)
+    if text is None:
+        return []
     for line_no, line in enumerate(text.splitlines(), start=1):
         if should_ignore_match(relative_path, line):
             continue
@@ -170,14 +149,9 @@ def scan_text_file(root: Path, path: Path) -> list[dict[str, object]]:
     return findings
 
 
-def get_call_name(node: ast.AST) -> str:
+def get_call_name(node: ast.AST) -> str:  # noqa: release-audit
     """Возвращает квалифицированное имя вызова или атрибута."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        parent = get_call_name(node.value)
-        return f"{parent}.{node.attr}" if parent else node.attr
-    return ""
+    return get_qualified_name(node)
 
 
 def is_interpolated_command(node: ast.AST) -> bool:

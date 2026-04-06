@@ -6,7 +6,6 @@ def build_key(finding: dict[str, object]) -> tuple[object, ...]:
     return (
         finding.get("rule"),
         finding.get("path"),
-        finding.get("line"),
     )
 
 

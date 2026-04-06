@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 from pathlib import Path
 
 from finding_utils import build_finding
+from shared import load_config_helpers
 
 GITIGNORE_RULES: tuple[tuple[str, str], ...] = (
     (".env", "gitignore-missing-dotenv"),
@@ -67,16 +67,6 @@ def check_gitignore(root: Path) -> list[dict[str, object]]:
 def build_findings(root: Path) -> list[dict[str, object]]:
     """Строит findings по release-artifact hygiene."""
     return check_gitignore(root)
-
-
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для применения suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def main() -> None:

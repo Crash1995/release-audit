@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_finding
+from shared import load_config_helpers
 
 PYTHON_MANIFESTS = ("requirements.txt", "pyproject.toml")
 NODE_MANIFESTS = ("package.json",)
@@ -15,16 +14,6 @@ UNPINNED_REQUIREMENT = re.compile(r"^[A-Za-z0-9_.-]+(\[[A-Za-z0-9_,.-]+\])?\s*(>
 DIRECT_REFERENCE = re.compile(r"(@\s*(git\+|https?://|file:))|(^-e\s+)")
 VERSION_RISK_PATTERN = re.compile(r'(?:"|\')(\*|latest|main|master)(?:"|\')')
 MAX_SNIPPET_LENGTH = 160
-
-
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def scan_requirements(root: Path, path: Path) -> list[dict[str, object]]:

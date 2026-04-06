@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import sys
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_finding
+from shared import get_short_call_name, load_config_helpers
 
 HTTP_CALLS = {"delete", "get", "patch", "post", "put", "request"}
 MONEY_NAMES = {"amount", "balance", "cost", "price", "profit", "size", "total", "value"}
@@ -15,11 +14,7 @@ MONEY_NAMES = {"amount", "balance", "cost", "price", "profit", "size", "total", 
 
 def get_call_name(node: ast.Call) -> str:
     """Возвращает короткое имя вызываемой функции."""
-    if isinstance(node.func, ast.Name):
-        return node.func.id
-    if isinstance(node.func, ast.Attribute):
-        return node.func.attr
-    return ""
+    return get_short_call_name(node)
 
 
 def has_timeout(node: ast.Call) -> bool:
@@ -193,16 +188,6 @@ def scan_python_file(root: Path, path: Path) -> list[dict[str, object]]:
             findings.extend(scan_assignment_node(relative_path, node))
 
     return findings
-
-
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def main() -> None:

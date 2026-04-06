@@ -35,6 +35,7 @@ description: Use when the user asks for a full pre-release audit of an entire co
 - `scripts/read_audit_history.py` для чтения прошлых аудитов;
 - `scripts/run_fast_scans.py` для regex/keyword сигналов высокого риска;
 - `scripts/security_audit.py` для дополнительных security/data-leak checks;
+- `scripts/web3_security_audit.py` для Web3-специфичных проверок: hardcoded mnemonics, private keys, inline `from_key()`, адреса без EIP-55 checksum;
 - `scripts/performance_audit.py` для memory/performance smells и resource-handling checks;
 - `scripts/dependency_audit.py` для dependency/configuration risks;
 - `scripts/python_policy_checks.py` для AST-проверок Python-кода;
@@ -43,7 +44,8 @@ description: Use when the user asks for a full pre-release audit of an entire co
 - `scripts/stale_files_audit.py` для старой документации, legacy-конфигов и cleanup-кандидатов;
 - `scripts/compare_audits.py` для сравнения текущего аудита с прошлым;
 - `scripts/write_audit_report.py` для сохранения Markdown-отчёта и встроенных metadata для истории;
-- `scripts/validate_skill.py` для локальной self-validation skill-а.
+- `scripts/validate_skill.py` для локальной self-validation skill-а;
+- `scripts/shared.py` — общие утилиты всех сканеров: skip-списки, size guard, noqa-маркер, AST helpers.
 - После автоматических прогонов дочитывай файлы вручную по категориям и подтверждай или отклоняй находки.
 
 ## Источники правил

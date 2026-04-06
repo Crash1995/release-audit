@@ -3,38 +3,17 @@ from __future__ import annotations
 import json
 import re
 import sys
-import importlib.util
 from pathlib import Path
-from types import ModuleType
 
 from finding_utils import build_blocked, build_finding
+from shared import (
+    BINARY_EXTENSIONS,
+    SKIP_DIR_NAMES,
+    has_noqa_marker,
+    load_config_helpers,
+    safe_read_text,
+)
 
-SKIP_DIR_NAMES = {
-    ".git",
-    ".venv",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-}
-
-BINARY_EXTENSIONS = {
-    ".bin",
-    ".dll",
-    ".dylib",
-    ".exe",
-    ".gif",
-    ".ico",
-    ".jpeg",
-    ".jpg",
-    ".pdf",
-    ".png",
-    ".pyc",
-    ".so",
-    ".svgz",
-    ".webp",
-    ".zip",
-}
 MAX_SNIPPET_LENGTH = 160
 
 PATTERNS: tuple[dict[str, object], ...] = (
@@ -187,32 +166,12 @@ def build_snippet(line: str) -> str:
 
 
 def should_ignore_match(path: Path, line: str) -> bool:
-    """Отсекает self-noise и служебные строки из собственного репозитория skill-а."""
-    if path.name == "run_fast_scans.py" and "token|secret|password" in line:
-        return True
-    if path.name == "run_fast_scans.py" and "line.lstrip().startswith" in line:
-        return True
-    if line.lstrip().startswith('"""') and "print()" in line:
-        return True
-    if '"pattern": r"' in line:
-        return True
-    if '"description":' in line or '"title":' in line or '"impact":' in line:
-        return True
-    if "description=" in line or "title=" in line or "impact=" in line or "suggested_fix=" in line or "snippet=" in line:
+    """Отсекает self-noise через маркер и минимальные structural rules."""
+    if has_noqa_marker(line):
         return True
     if path.parts and path.parts[0] == "references" and "`" in line:
         return True
     if path.parts and path.parts[0] == "tests":
-        return True
-    if path.parts and path.parts[0] == "scripts" and "build_finding(" in line:
-        return True
-    if path.parts and path.parts[0] == "scripts" and '"suggested_fix":' in line:
-        return True
-    if path.parts and path.parts[0] == "scripts" and "re.compile(" in line:
-        return True
-    if path.parts and path.parts[0] == "scripts" and "logger\\." in line and "(token|secret|password" in line:
-        return True
-    if path.parts and path.parts[0] == "scripts" and "mnemonic|private[_ -]?key" in line:
         return True
     return False
 
@@ -221,20 +180,19 @@ def scan_file(root: Path, path: Path) -> list[dict[str, object]]:
     """Сканирует один файл regex/keyword правилами высокого риска."""
     findings: list[dict[str, object]] = []
     relative_path = path.relative_to(root)
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError as error:
+    text = safe_read_text(path)
+    if text is None:
         return [
             build_blocked(
                 rule="scan-error",
                 severity="P1",
                 category="Blocked",
                 path=relative_path,
-                title="File could not be scanned",
-                description="The scanner could not read the file during the automated pass.",
+                title="File too large or unreadable",
+                description="The file exceeds size limit or could not be read.",
                 impact="Coverage is incomplete until the file can be inspected.",
-                suggested_fix="Fix filesystem permissions or encoding issues and rerun the audit.",
-                error=str(error),
+                suggested_fix="Check file size and permissions, then rerun the audit.",
+                error="file too large or unreadable",
             )
         ]
     for line_no, line in enumerate(text.splitlines(), start=1):
@@ -257,16 +215,6 @@ def scan_file(root: Path, path: Path) -> list[dict[str, object]]:
                     )
                 )
     return findings
-
-
-def load_config_helpers() -> ModuleType:
-    """Загружает helper для suppressions и severity overrides."""
-    module_path = Path(__file__).with_name("load_audit_config.py")
-    spec = importlib.util.spec_from_file_location("load_audit_config", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def main() -> None:

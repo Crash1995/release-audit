@@ -1,290 +1,285 @@
 # release-audit
 
-## Русский
+Skill для полного предрелизного аудита репозитория.
 
-`release-audit` — это skill для полного предрелизного аудита репозитория.
+Не diff-review и не grep-скан. Полный проход по репозиторию перед публикацией: инвентаризация файлов, детерминированные проверки, сбор findings, сравнение с прошлым аудитом, финальный `GO / NO-GO` verdict.
 
-Это не diff-review и не быстрый grep-скан. Skill рассчитан на полный проход по репозиторию перед публикацией или релизом: с инвентаризацией файлов, запуском детерминированных проверок, сбором findings, сравнением с прошлым аудитом и финальным `GO / NO-GO`.
+## Совместимость
 
-### Как это устроено
+| Платформа | Установка | Вызов |
+|-----------|-----------|-------|
+| **Claude Code** | `~/.claude/skills/release-audit/` | `/release-audit` или `$release-audit` |
+| **Codex CLI** | `~/.codex/skills/release-audit/` | `$release-audit` |
+| **Cursor** | `~/.cursor/skills/release-audit/` | по инструкции IDE |
+| **Antigravity** | `~/.antigravity/skills/release-audit/` | `$release-audit` |
+| **Standalone** | любая директория | `python3 scripts/run_release_audit.py /path/to/repo` |
 
-В репозитории есть три слоя:
+## Установка
 
-- [`SKILL.md`](/Users/albertfedotov/.codex/skills/release-audit/SKILL.md)
-  Основная инструкция для агента. Здесь описан workflow: что читать сначала, как покрывать файлы, как оформлять findings, когда ставить `GO / NO-GO`, что сохранять в отчёт.
-
-- [`agents/openai.yaml`](/Users/albertfedotov/.codex/skills/release-audit/agents/openai.yaml)
-  Метаданные skill-а: display name, short description и default prompt для вызова.
-
-- [`scripts/`](/Users/albertfedotov/.codex/skills/release-audit/scripts)
-  Исполняемый движок аудита. Эти скрипты реально строят findings, verdict и Markdown-отчёт.
-
-### Как работает pipeline
-
-Канонический entrypoint:
+### Вариант 1 — git clone в директорию skills
 
 ```bash
+# Claude Code
+git clone https://github.com/Crash1995/release-audit.git ~/.claude/skills/release-audit
+
+# Codex CLI
+git clone https://github.com/Crash1995/release-audit.git ~/.codex/skills/release-audit
+
+# Cursor
+git clone https://github.com/Crash1995/release-audit.git ~/.cursor/skills/release-audit
+```
+
+### Вариант 2 — standalone
+
+```bash
+git clone https://github.com/Crash1995/release-audit.git
+cd release-audit
 python3 scripts/run_release_audit.py /path/to/repo
 ```
 
-Что делает entrypoint:
+Зависимостей нет — только Python 3.11+ стандартная библиотека.
 
-1. Читает прошлую историю из `docs/release-audits/`, если она есть.
-2. Строит инвентарь файлов репозитория.
-3. Запускает все аудит-сканеры.
-4. Применяет локальный `.release-audit.toml`, если он есть.
-5. Сравнивает текущие findings с прошлым аудитом.
-6. Строит `GO / NO-GO`.
-7. Сохраняет Markdown-отчёт в `docs/release-audits/`.
+## Использование
 
-### Что именно проверяется
-
-- security-проблемы и hardcoded secrets;
-- утечки данных и `.env`/gitignore риски;
-- runtime и edge-case проблемы;
-- memory/performance smells;
-- Python policy violations;
-- Python tech debt;
-- cleanup-кандидаты в репозитории;
-- comparison с предыдущим аудитом;
-- финальный `GO / NO-GO`.
-
-### Структура `scripts/`
-
-- [`scripts/run_release_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/run_release_audit.py)
-  Главный агрегатор. Запускает все остальные проверки, собирает единый отчёт и сохраняет Markdown.
-
-- [`scripts/inventory_repo.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/inventory_repo.py)
-  Строит инвентарь файлов и их категорий: `source`, `config`, `tests`, `docs`, `ci`, `infra`, `binary`, `other`.
-
-- [`scripts/run_fast_scans.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/run_fast_scans.py)
-  Быстрые regex/keyword проверки высокого риска: task markers, placeholder values, debug calls, secrets, `eval/exec`, shell execution, disabled TLS verification, plain HTTP URLs и похожие сигналы.
-
-- [`scripts/security_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/security_audit.py)
-  Дополнительные security/data-leak проверки: DOM injection patterns, token storage, sensitive log fields, interpolated subprocess/path usage.
-
-- [`scripts/performance_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/performance_audit.py)
-  Performance и resource checks: expensive calls inside loops, `open()` без context manager, `aiohttp.ClientSession` без явного lifecycle, listener cleanup smells.
-
-- [`scripts/dependency_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/dependency_audit.py)
-  Проверка dependency/configuration рисков: непинованные зависимости, direct references, floating versions, отсутствие manifest-а.
-
-- [`scripts/python_policy_checks.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/python_policy_checks.py)
-  Python policy checks: bare except, empty exception handlers, stdout debug calls, `requests` без timeout, `float` в money-like code.
-
-- [`scripts/tech_debt_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/tech_debt_audit.py)
-  Deterministic tech debt audit для Python: длинные функции, вложенность, missing type hints, mutable defaults, weak names, magic numbers, task markers в source и blocking calls in async.
-
-- [`scripts/check_release_artifacts.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/check_release_artifacts.py)
-  Проверка release hygiene: `.gitignore`, `.env`, `*.log`, `__pycache__` и риск утечки локальных артефактов.
-
-- [`scripts/stale_files_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/stale_files_audit.py)
-  Cleanup-аудит: legacy configs, stale docs, stale tests, backup files.
-
-- [`scripts/read_audit_history.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/read_audit_history.py)
-  Читает прошлые Markdown-отчёты из `docs/release-audits/`.
-
-- [`scripts/compare_audits.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/compare_audits.py)
-  Сравнивает прошлый и текущий набор findings: `new`, `carried_over`, `resolved`.
-
-- [`scripts/release_decision.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/release_decision.py)
-  Строит итоговый `GO / NO-GO` verdict по severity, blocked checks и критичным rules.
-
-- [`scripts/write_audit_report.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/write_audit_report.py)
-  Собирает Markdown-отчёт, встраивает compact metadata и сохраняет его в `docs/release-audits/`.
-
-- [`scripts/validate_skill.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/validate_skill.py)
-  Локальная self-validation самого skill-репозитория.
-
-- [`scripts/finding_utils.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/finding_utils.py)
-  Общий builder для findings и blocked-findings в едином формате.
-
-### Формат результата
-
-На выходе skill даёт:
-
-- `GO` или `NO-GO`;
-- findings по категориям и severity;
-- comparison с прошлым аудитом;
-- coverage summary;
-- saved Markdown report в `docs/release-audits/`.
-
-Отчёт сохраняется как:
+### Через агента
 
 ```text
-docs/release-audits/YYYY-MM-DD-HHMM-release-audit.md
+Проведи полный release-аудит этого репозитория.
 ```
 
-### Что лежит в `references/`
-
-- [`references/severity-rubric.md`](/Users/albertfedotov/.codex/skills/release-audit/references/severity-rubric.md)
-  Шкала severity и правила приоритизации.
-
-- [`references/false-positive-rules.md`](/Users/albertfedotov/.codex/skills/release-audit/references/false-positive-rules.md)
-  Правила против ложных срабатываний.
-
-- [`references/report-template.md`](/Users/albertfedotov/.codex/skills/release-audit/references/report-template.md)
-  Каркас итогового отчёта.
-
-- [`references/project-rules.md`](/Users/albertfedotov/.codex/skills/release-audit/references/project-rules.md)
-  Project-specific policy ideas.
-
-- [`references/config-format.md`](/Users/albertfedotov/.codex/skills/release-audit/references/config-format.md)
-  Формат `.release-audit.toml`.
-
-### Как использовать как skill
-
-Если ваша среда поддерживает skills, агент должен читать [`SKILL.md`](/Users/albertfedotov/.codex/skills/release-audit/SKILL.md) и следовать описанному там workflow.
-
-Пример запроса:
-
-```text
-Используй $release-audit и проведи полный release-аудит этого репозитория.
-```
-
-Если среда не умеет вызывать skill напрямую, можно запускать движок локально:
-
-```bash
-python3 scripts/run_release_audit.py /path/to/repo
-```
-
----
-
-## English
-
-`release-audit` is a skill for full pre-release repository audits.
-
-This is not a diff review or a quick grep pass. It is designed for a full repository-wide audit before publishing or shipping: file inventory, deterministic checks, finding aggregation, comparison with the previous audit, and a final `GO / NO-GO` verdict.
-
-### How it is structured
-
-The repository has three layers:
-
-- [`SKILL.md`](/Users/albertfedotov/.codex/skills/release-audit/SKILL.md)
-  The main agent instruction file. It defines the workflow: what to inspect first, how to cover files, how to format findings, when to issue `GO / NO-GO`, and what to save.
-
-- [`agents/openai.yaml`](/Users/albertfedotov/.codex/skills/release-audit/agents/openai.yaml)
-  Skill metadata: display name, short description, and default prompt.
-
-- [`scripts/`](/Users/albertfedotov/.codex/skills/release-audit/scripts)
-  The executable audit engine. These scripts actually build findings, the verdict, and the Markdown report.
-
-### Pipeline
-
-Canonical entrypoint:
-
-```bash
-python3 scripts/run_release_audit.py /path/to/repo
-```
-
-What the entrypoint does:
-
-1. Reads previous audit history from `docs/release-audits/`, if present.
-2. Builds a repository file inventory.
-3. Runs all audit scanners.
-4. Applies local `.release-audit.toml`, if present.
-5. Compares current findings against the previous audit.
-6. Builds the final `GO / NO-GO`.
-7. Saves a Markdown report to `docs/release-audits/`.
-
-### What it checks
-
-- security issues and hardcoded secrets;
-- data leaks and `.env` / gitignore hygiene;
-- runtime and edge-case risks;
-- memory/performance smells;
-- Python policy violations;
-- Python technical debt;
-- repository cleanup candidates;
-- comparison with the previous audit;
-- final `GO / NO-GO`.
-
-### `scripts/` layout
-
-- [`scripts/run_release_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/run_release_audit.py)
-  Main orchestrator. Runs all other checks, assembles the report, and saves Markdown.
-
-- [`scripts/inventory_repo.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/inventory_repo.py)
-  Builds the repository file inventory and categories.
-
-- [`scripts/run_fast_scans.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/run_fast_scans.py)
-  Fast regex/keyword checks for high-risk signals.
-
-- [`scripts/security_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/security_audit.py)
-  Additional security and data-leak checks.
-
-- [`scripts/performance_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/performance_audit.py)
-  Performance and resource-handling checks.
-
-- [`scripts/dependency_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/dependency_audit.py)
-  Dependency and configuration risk checks.
-
-- [`scripts/python_policy_checks.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/python_policy_checks.py)
-  Python runtime/safety policy checks.
-
-- [`scripts/tech_debt_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/tech_debt_audit.py)
-  Deterministic Python tech-debt checks.
-
-- [`scripts/check_release_artifacts.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/check_release_artifacts.py)
-  `.gitignore` and local artifact hygiene.
-
-- [`scripts/stale_files_audit.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/stale_files_audit.py)
-  Cleanup audit for stale docs, stale tests, legacy configs, and backup files.
-
-- [`scripts/read_audit_history.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/read_audit_history.py)
-  Reads previous saved audit reports.
-
-- [`scripts/compare_audits.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/compare_audits.py)
-  Compares current findings with the previous audit.
-
-- [`scripts/release_decision.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/release_decision.py)
-  Builds the final `GO / NO-GO` verdict.
-
-- [`scripts/write_audit_report.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/write_audit_report.py)
-  Builds and saves the Markdown report with embedded compact metadata.
-
-- [`scripts/validate_skill.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/validate_skill.py)
-  Local self-validation for the skill repository itself.
-
-- [`scripts/finding_utils.py`](/Users/albertfedotov/.codex/skills/release-audit/scripts/finding_utils.py)
-  Shared helpers for normalized findings and blocked findings.
-
-### Output
-
-The skill produces:
-
-- `GO` or `NO-GO`;
-- findings grouped by category and severity;
-- comparison with the previous audit;
-- coverage summary;
-- a saved Markdown report in `docs/release-audits/`.
-
-Saved report path:
-
-```text
-docs/release-audits/YYYY-MM-DD-HHMM-release-audit.md
-```
-
-### `references/`
-
-- [`references/severity-rubric.md`](/Users/albertfedotov/.codex/skills/release-audit/references/severity-rubric.md)
-- [`references/false-positive-rules.md`](/Users/albertfedotov/.codex/skills/release-audit/references/false-positive-rules.md)
-- [`references/report-template.md`](/Users/albertfedotov/.codex/skills/release-audit/references/report-template.md)
-- [`references/project-rules.md`](/Users/albertfedotov/.codex/skills/release-audit/references/project-rules.md)
-- [`references/config-format.md`](/Users/albertfedotov/.codex/skills/release-audit/references/config-format.md)
-
-### Using it as a skill
-
-If your environment supports skills, the agent should read [`SKILL.md`](/Users/albertfedotov/.codex/skills/release-audit/SKILL.md) and follow that workflow.
-
-Example prompt:
+или
 
 ```text
 Use $release-audit and run a full release audit for this repository.
 ```
 
-If your environment does not support direct skill invocation, run the engine locally:
+Агент прочитает `SKILL.md`, запустит pipeline и выдаст структурированный отчёт с verdict.
+
+### Через CLI
 
 ```bash
 python3 scripts/run_release_audit.py /path/to/repo
 ```
+
+На выходе — JSON-отчёт в stdout и Markdown в `docs/release-audits/`. Exit code `1` при `NO-GO` — удобно для CI.
+
+## Что проверяется
+
+| Сканер | Что ищет |
+|--------|----------|
+| `run_fast_scans.py` | task markers, placeholders, debug calls, secrets, `eval/exec`, shell execution, disabled TLS, plain HTTP |
+| `security_audit.py` | DOM injection, token storage, sensitive log fields, interpolated subprocess/path |
+| `web3_security_audit.py` | hardcoded mnemonics, private keys, `from_key()` с inline ключом, адреса без EIP-55 checksum |
+| `performance_audit.py` | expensive calls в циклах, `open()` без context manager, `aiohttp.ClientSession` без lifecycle, listener leaks |
+| `dependency_audit.py` | unpinned deps, floating versions, missing manifest |
+| `python_policy_checks.py` | bare except, empty handlers, stdout debug, `requests` без timeout, `float` для денег |
+| `tech_debt_audit.py` | длинные функции, вложенность, missing type hints, mutable defaults, weak names, magic numbers, blocking calls в async |
+| `check_release_artifacts.py` | `.gitignore` hygiene, `.env` risks, tracked logs/caches |
+| `stale_files_audit.py` | legacy configs, stale docs/tests, backup files |
+| `validate_skill.py` | self-validation skill-репозитория (только если есть `SKILL.md`) |
+
+## Pipeline
+
+```text
+history → inventory → scanners → config → compare → decision → report
+```
+
+1. Читает прошлый аудит из `docs/release-audits/`
+2. Строит инвентарь файлов репозитория
+3. Запускает все сканеры
+4. Применяет `.release-audit.toml` (suppressions, severity overrides)
+5. Сравнивает findings с прошлым аудитом: new / carried over / resolved
+6. Строит `GO / NO-GO` verdict
+7. Сохраняет Markdown-отчёт с embedded metadata
+
+## Конфигурация
+
+Создай `.release-audit.toml` в корне проекта:
+
+```toml
+[suppressions]
+# Подавить конкретные правила для конкретных путей
+"python-magic-number" = ["scripts/constants.py"]
+"python-long-function" = ["legacy/old_module.py"]
+
+[severity_overrides]
+# Переопределить severity
+"python-missing-type-hints" = "P3"
+```
+
+Подробнее: [`references/config-format.md`](references/config-format.md)
+
+## Подавление в коде
+
+Добавь маркер в конец строки:
+
+```python
+key = "0xdeadbeef..."  # noqa: release-audit
+```
+
+Строка с маркером будет пропущена всеми сканерами.
+
+## NO-GO Policy
+
+Автоматический `NO-GO` при любом из условий:
+- finding с `severity = P0`
+- blocked проверка по критичному пути
+- `hardcoded-secret`, `private-key-material` или `tracked-env-risk`
+- отсутствует `.gitignore` или не закрыт риск утечки
+
+## Формат отчёта
+
+```text
+docs/release-audits/YYYY-MM-DD-HHMM-release-audit.md
+```
+
+Отчёт содержит:
+- `GO / NO-GO` verdict
+- findings по severity и категориям
+- progress: new / carried over / resolved
+- coverage summary
+- blocked checks
+- embedded metadata для автоматического сравнения
+
+## Структура проекта
+
+```
+release-audit/
+├── SKILL.md                          # инструкция для агента
+├── README.md                         # этот файл
+├── .gitignore
+├── agents/
+│   └── openai.yaml                   # метаданные skill-а
+├── scripts/
+│   ├── run_release_audit.py          # главный entrypoint
+│   ├── shared.py                     # общие утилиты всех сканеров
+│   ├── finding_utils.py              # builder для findings
+│   ├── inventory_repo.py             # инвентарь файлов
+│   ├── run_fast_scans.py             # regex/keyword сканер
+│   ├── security_audit.py             # security + data leaks
+│   ├── web3_security_audit.py        # Web3-специфичные checks
+│   ├── performance_audit.py          # performance + resources
+│   ├── dependency_audit.py           # dependency risks
+│   ├── python_policy_checks.py       # Python policy checks
+│   ├── tech_debt_audit.py            # tech debt checks
+│   ├── check_release_artifacts.py    # release hygiene
+│   ├── stale_files_audit.py          # cleanup candidates
+│   ├── load_audit_config.py          # .release-audit.toml loader
+│   ├── read_audit_history.py         # чтение прошлых аудитов
+│   ├── compare_audits.py             # diff findings
+│   ├── release_decision.py           # GO / NO-GO logic
+│   ├── write_audit_report.py         # Markdown report builder
+│   └── validate_skill.py             # self-validation
+└── references/
+    ├── severity-rubric.md            # шкала severity
+    ├── false-positive-rules.md       # правила против FP
+    ├── report-template.md            # каркас отчёта
+    ├── project-rules.md              # project-specific policy
+    └── config-format.md              # формат .release-audit.toml
+```
+
+---
+
+# English
+
+`release-audit` is a skill for full pre-release repository audits.
+
+Not a diff review or a quick grep scan. A full repository pass before publishing: file inventory, deterministic checks, finding aggregation, comparison with the previous audit, and a final `GO / NO-GO` verdict.
+
+## Compatibility
+
+| Platform | Install path | Invocation |
+|----------|-------------|------------|
+| **Claude Code** | `~/.claude/skills/release-audit/` | `/release-audit` or `$release-audit` |
+| **Codex CLI** | `~/.codex/skills/release-audit/` | `$release-audit` |
+| **Cursor** | `~/.cursor/skills/release-audit/` | per IDE instructions |
+| **Antigravity** | `~/.antigravity/skills/release-audit/` | `$release-audit` |
+| **Standalone** | any directory | `python3 scripts/run_release_audit.py /path/to/repo` |
+
+## Installation
+
+### Option 1 — clone into skills directory
+
+```bash
+# Claude Code
+git clone https://github.com/Crash1995/release-audit.git ~/.claude/skills/release-audit
+
+# Codex CLI
+git clone https://github.com/Crash1995/release-audit.git ~/.codex/skills/release-audit
+
+# Cursor
+git clone https://github.com/Crash1995/release-audit.git ~/.cursor/skills/release-audit
+```
+
+### Option 2 — standalone
+
+```bash
+git clone https://github.com/Crash1995/release-audit.git
+cd release-audit
+python3 scripts/run_release_audit.py /path/to/repo
+```
+
+No dependencies — Python 3.11+ standard library only.
+
+## Usage
+
+### Via agent
+
+```text
+Run a full release audit for this repository.
+```
+
+The agent reads `SKILL.md`, runs the pipeline, and produces a structured report with a verdict.
+
+### Via CLI
+
+```bash
+python3 scripts/run_release_audit.py /path/to/repo
+```
+
+Outputs JSON to stdout, saves Markdown to `docs/release-audits/`. Exit code `1` on `NO-GO` for CI integration.
+
+## What it checks
+
+| Scanner | Focus |
+|---------|-------|
+| `run_fast_scans.py` | task markers, placeholders, debug calls, secrets, `eval/exec`, shell execution, disabled TLS, plain HTTP |
+| `security_audit.py` | DOM injection, token storage, sensitive log fields, interpolated subprocess/path |
+| `web3_security_audit.py` | hardcoded mnemonics, private keys, inline `from_key()`, addresses without EIP-55 checksum |
+| `performance_audit.py` | expensive calls in loops, `open()` without context manager, `aiohttp.ClientSession` lifecycle, listener leaks |
+| `dependency_audit.py` | unpinned deps, floating versions, missing manifest |
+| `python_policy_checks.py` | bare except, empty handlers, stdout debug, `requests` without timeout, `float` for money |
+| `tech_debt_audit.py` | long functions, nesting, missing type hints, mutable defaults, weak names, magic numbers, blocking calls in async |
+| `check_release_artifacts.py` | `.gitignore` hygiene, `.env` risks, tracked logs/caches |
+| `stale_files_audit.py` | legacy configs, stale docs/tests, backup files |
+| `validate_skill.py` | skill self-validation (only when `SKILL.md` exists) |
+
+## Configuration
+
+Create `.release-audit.toml` in the project root:
+
+```toml
+[suppressions]
+"python-magic-number" = ["scripts/constants.py"]
+
+[severity_overrides]
+"python-missing-type-hints" = "P3"
+```
+
+Details: [`references/config-format.md`](references/config-format.md)
+
+## Inline suppression
+
+```python
+key = "0xdeadbeef..."  # noqa: release-audit
+```
+
+Lines with this marker are skipped by all scanners.
+
+## NO-GO Policy
+
+Automatic `NO-GO` on any of:
+- any `P0` finding
+- blocked check on a critical path
+- `hardcoded-secret`, `private-key-material`, or `tracked-env-risk`
+- missing `.gitignore` or uncovered env leak risk
