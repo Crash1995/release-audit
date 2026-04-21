@@ -7,27 +7,91 @@ from pathlib import Path
 SKIP_DIR_NAMES = {
     ".git",
     ".venv",
+    "venv",
+    "env",
+    ".env",
     "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".cache",
     "build",
     "dist",
     "node_modules",
+    ".eggs",
+    "*.egg-info",
+    "docs",
+    "doc",
+    ".github",
+    ".gitlab",
+    ".vscode",
+    ".idea",
+    ".claude",
+    "htmlcov",
+    "coverage",
+    ".coverage",
+    "data",
+    "output",
+    "outputs",
+    "logs",
+    "tmp",
+    "temp",
+    "notebooks",
+}
+
+SKIP_FILE_NAMES = {
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.development",
+    ".DS_Store",
+    "Thumbs.db",
+    ".editorconfig",
+    ".prettierrc",
+    ".eslintrc",
+    "poetry.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "Pipfile.lock",
+}
+
+SKIP_FILE_PATTERNS = {
+    ".log",
+    ".bak",
+    ".old",
+    ".orig",
+    ".swp",
+    ".swo",
+    ".tmp",
 }
 
 BINARY_EXTENSIONS = {
     ".bin",
+    ".csv",
+    ".db",
     ".dll",
     ".dylib",
     ".exe",
     ".gif",
+    ".gz",
     ".ico",
     ".jpeg",
     ".jpg",
+    ".parquet",
     ".pdf",
+    ".pickle",
+    ".pkl",
     ".png",
     ".pyc",
     ".so",
+    ".sqlite",
+    ".sqlite3",
     ".svgz",
+    ".tar",
     ".webp",
+    ".whl",
     ".zip",
 }
 
@@ -65,6 +129,13 @@ def get_skip_reason(path: Path) -> str | None:
     parts = set(path.parts)
     if parts & SKIP_DIR_NAMES:
         return "tooling-or-build-directory"
+    # egg-info директории матчатся по суффиксу
+    if any(part.endswith(".egg-info") for part in path.parts):
+        return "tooling-or-build-directory"
+    if path.name in SKIP_FILE_NAMES:
+        return "service-file"
+    if path.suffix.lower() in SKIP_FILE_PATTERNS:
+        return "temp-or-backup-file"
     if ".min." in path.name:
         return "minified-asset"
     if is_binary_path(path):
@@ -95,7 +166,7 @@ def build_inventory(root: Path) -> list[dict[str, object]]:
 
 def main() -> None:
     """CLI entrypoint для построения inventory репозитория."""
-    root = Path.cwd()
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
     files = build_inventory(root)
     inventory = {"root": str(root), "total_files": len(files), "files": files}
     json.dump(inventory, sys.stdout, ensure_ascii=False, indent=2)
